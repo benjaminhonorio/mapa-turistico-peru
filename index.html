@@ -6,10 +6,7 @@
     <title>Recursos Turisticos del Peru</title>
 
     <!-- Leaflet CSS -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Leaflet MarkerCluster CSS -->
     <link
       rel="stylesheet"
@@ -26,7 +23,11 @@
     <header>
       <h1>Recursos Turisticos del Peru</h1>
       <p class="subtitle">
-        Inventario Nacional - <span id="count">0</span> recursos
+        Inventario Nacional - <span id="total-count">0</span> recursos
+        (<span id="count">0</span> en mapa, <span id="no-location-count-header">0</span> sin ubicacion)
+      </p>
+      <p class="attribution">
+        Fuente: <a href="https://www.datosabiertos.gob.pe/dataset/inventario-nacional-de-recursos-tur%C3%ADsticos" target="_blank">Datos Abiertos - MINCETUR</a>
       </p>
     </header>
 
@@ -57,9 +58,7 @@
     </div>
 
     <div id="no-location-panel" class="panel collapsed">
-      <button class="panel-toggle">
-        Sin ubicacion (<span id="no-location-count">0</span>)
-      </button>
+      <button class="panel-toggle">Sin ubicacion (<span id="no-location-count">0</span>)</button>
       <div class="panel-content">
         <div id="no-location-list"></div>
       </div>

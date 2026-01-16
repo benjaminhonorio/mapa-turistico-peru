@@ -12,8 +12,7 @@ const categoryColors = {
   "1. SITIOS NATURALES": "#2ecc71",
   "2. MANIFESTACIONES CULTURALES": "#3498db",
   "3. FOLCLORE": "#f1c40f",
-  "4. REALIZACIONES TECNICAS, CIENTIFICAS O ARTISTICAS CONTEMPORANEAS":
-    "#9b59b6",
+  "4. REALIZACIONES TECNICAS, CIENTIFICAS O ARTISTICAS CONTEMPORANEAS": "#9b59b6",
   "5. ACONTECIMIENTOS PROGRAMADOS": "#e74c3c",
 };
 
@@ -43,9 +42,7 @@ function createMarkerIcon(color) {
 }
 
 function createPopupContent(row) {
-  const categoryClass = getCategoryClass(
-    row["CATEGORÍA"] || row["CATEGORIA"] || ""
-  );
+  const categoryClass = getCategoryClass(row["CATEGORÍA"] || row["CATEGORIA"] || "");
   const name = row["NOMBRE DEL RECURSO"] || "Sin nombre";
   const category = row["CATEGORÍA"] || row["CATEGORIA"] || "Sin categoría";
   const type = row["TIPO DE CATEGORÍA"] || row["TIPO DE CATEGORIA"] || "";
@@ -57,17 +54,12 @@ function createPopupContent(row) {
 
   let html = `
         <div class="popup-title">${name}</div>
-        <span class="popup-category ${categoryClass}">${category.replace(
-    /^\d+\.\s*/,
-    ""
-  )}</span>
+        <span class="popup-category ${categoryClass}">${category.replace(/^\d+\.\s*/, "")}</span>
         <div class="popup-location">${district}, ${province}, ${region}</div>
     `;
 
   if (type || subtype) {
-    html += `<div class="popup-type">${type}${
-      subtype ? " - " + subtype : ""
-    }</div>`;
+    html += `<div class="popup-type">${type}${subtype ? " - " + subtype : ""}</div>`;
   }
 
   // Link to MINCETUR ficha
@@ -153,16 +145,19 @@ Papa.parse("Inventario_recursos_turisticos.csv", {
 
     map.addLayer(markers);
 
+    const noLocationCount = resourcesWithoutLocation.length;
+    const totalCount = count + noLocationCount;
+
+    document.getElementById("total-count").textContent = totalCount.toLocaleString();
     document.getElementById("count").textContent = count.toLocaleString();
+    document.getElementById("no-location-count-header").textContent =
+      noLocationCount.toLocaleString();
 
     renderNoLocationPanel(resourcesWithoutLocation);
 
     loadingEl.remove();
 
-    console.log(`Loaded ${count} tourist resources`);
-    console.log(
-      `${resourcesWithoutLocation.length} resources without valid location`
-    );
+    console.log(`Total: ${totalCount}, En mapa: ${count}, Sin ubicacion: ${noLocationCount}`);
   },
   error: function (error) {
     loadingEl.textContent = "Error al cargar los datos";
