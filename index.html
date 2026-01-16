@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recursos Turisticos del Peru</title>
+
+    <!-- Leaflet CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <!-- Leaflet MarkerCluster CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"
+    />
+
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Recursos Turisticos del Peru</h1>
+      <p class="subtitle">
+        Inventario Nacional - <span id="count">0</span> recursos
+      </p>
+    </header>
+
+    <div id="map"></div>
+
+    <div id="legend">
+      <h3>Categorias</h3>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #2ecc71"></span>
+        Sitios Naturales
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #3498db"></span>
+        Manifestaciones Culturales
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #f1c40f"></span>
+        Folclore
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #e74c3c"></span>
+        Acontecimientos Programados
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #9b59b6"></span>
+        Realizaciones Tecnicas
+      </div>
+    </div>
+
+    <div id="no-location-panel" class="panel collapsed">
+      <button class="panel-toggle">
+        Sin ubicacion (<span id="no-location-count">0</span>)
+      </button>
+      <div class="panel-content">
+        <div id="no-location-list"></div>
+      </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet MarkerCluster JS -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <!-- PapaParse for CSV -->
+    <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <script src="js/app.js"></script>
+  </body>
+</html>

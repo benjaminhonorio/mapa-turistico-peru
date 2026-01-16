@@ -1,0 +1,378 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, sans-serif;
+}
+
+header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+header h1 {
+  font-size: 1.4rem;
+  color: #2c3e50;
+}
+
+header .subtitle {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+}
+
+#map {
+  position: fixed;
+  top: 60px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+#legend {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  font-size: 0.85rem;
+}
+
+#legend h3 {
+  margin-bottom: 10px;
+  color: #2c3e50;
+  font-size: 0.9rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin: 5px 0;
+  color: #34495e;
+}
+
+.legend-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+/* Popup styles */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+}
+
+.leaflet-popup-content {
+  margin: 12px 15px;
+  line-height: 1.5;
+}
+
+.popup-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #2c3e50;
+  margin-bottom: 8px;
+}
+
+.popup-category {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  color: white;
+  margin-bottom: 8px;
+}
+
+.popup-category.natural {
+  background: #2ecc71;
+}
+.popup-category.cultural {
+  background: #3498db;
+}
+.popup-category.folclore {
+  background: #f1c40f;
+  color: #333;
+}
+.popup-category.eventos {
+  background: #e74c3c;
+}
+.popup-category.tecnico {
+  background: #9b59b6;
+}
+
+.popup-location {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+  margin-bottom: 8px;
+}
+
+.popup-type {
+  font-size: 0.8rem;
+  color: #95a5a6;
+  margin-bottom: 10px;
+}
+
+.leaflet-popup-content a.popup-link,
+.leaflet-popup-content a.popup-link:visited {
+  display: inline-block;
+  padding: 8px 16px;
+  background: #1a5276;
+  color: #ffffff !important;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border: none;
+}
+
+.leaflet-popup-content a.popup-link:hover {
+  background: #0d3a52;
+  color: #ffffff !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.leaflet-popup-content a.popup-link:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Cluster styles */
+.marker-cluster-small {
+  background-color: rgba(110, 204, 57, 0.6);
+}
+.marker-cluster-small div {
+  background-color: rgba(110, 204, 57, 0.8);
+}
+
+.marker-cluster-medium {
+  background-color: rgba(240, 194, 12, 0.6);
+}
+.marker-cluster-medium div {
+  background-color: rgba(240, 194, 12, 0.8);
+}
+
+.marker-cluster-large {
+  background-color: rgba(241, 128, 23, 0.6);
+}
+.marker-cluster-large div {
+  background-color: rgba(241, 128, 23, 0.8);
+}
+
+.marker-cluster {
+  background-clip: padding-box;
+  border-radius: 20px;
+}
+
+.marker-cluster div {
+  width: 30px;
+  height: 30px;
+  margin-left: 5px;
+  margin-top: 5px;
+  text-align: center;
+  border-radius: 15px;
+  font: 12px "Helvetica Neue", Arial, sans-serif;
+  font-weight: bold;
+  color: white;
+  line-height: 30px;
+}
+
+/* Loading state */
+.loading {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2000;
+  background: white;
+  padding: 20px 40px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  font-size: 1rem;
+  color: #2c3e50;
+}
+
+/* No-location Panel */
+#no-location-panel {
+  position: fixed;
+  right: 20px;
+  top: 80px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  max-width: 350px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+#no-location-panel .panel-toggle {
+  display: block;
+  width: 100%;
+  padding: 12px 15px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+#no-location-panel .panel-toggle:hover {
+  background: #c0392b;
+}
+
+#no-location-panel.collapsed .panel-content {
+  display: none;
+}
+
+#no-location-panel .panel-content {
+  padding: 0;
+  overflow-y: auto;
+  max-height: calc(100vh - 180px);
+}
+
+#no-location-list {
+  padding: 10px;
+}
+
+.region-group {
+  margin-bottom: 5px;
+}
+
+.region-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2c3e50;
+  transition: background 0.2s;
+}
+
+.region-header:hover {
+  background: #ecf0f1;
+}
+
+.region-toggle {
+  font-family: monospace;
+  width: 14px;
+  text-align: center;
+}
+
+.region-count {
+  color: #7f8c8d;
+  font-weight: normal;
+  margin-left: auto;
+}
+
+.region-items {
+  padding: 5px 0 5px 22px;
+}
+
+.resource-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.resource-item:hover {
+  background: #f8f9fa;
+}
+
+.resource-name {
+  font-size: 0.8rem;
+  color: #2c3e50;
+  line-height: 1.3;
+}
+
+.resource-category {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  color: white;
+  width: fit-content;
+}
+
+.resource-category.natural {
+  background: #2ecc71;
+}
+.resource-category.cultural {
+  background: #3498db;
+}
+.resource-category.folclore {
+  background: #f1c40f;
+  color: #333;
+}
+.resource-category.eventos {
+  background: #e74c3c;
+}
+.resource-category.tecnico {
+  background: #9b59b6;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  header h1 {
+    font-size: 1.1rem;
+  }
+
+  #legend {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    padding: 10px;
+  }
+
+  #legend h3 {
+    display: none;
+  }
+
+  .legend-item {
+    display: inline-flex;
+    margin-right: 10px;
+    font-size: 0.75rem;
+  }
+
+  #no-location-panel {
+    right: 10px;
+    left: 10px;
+    top: auto;
+    bottom: 80px;
+    max-width: none;
+    max-height: 50vh;
+  }
+
+  #no-location-panel .panel-content {
+    max-height: calc(50vh - 50px);
+  }
+}
