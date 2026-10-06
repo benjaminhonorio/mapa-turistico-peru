@@ -1,0 +1,124 @@
+---
+import "@fontsource-variable/bricolage-grotesque";
+import "@fontsource-variable/literata";
+import "../styles/global.css";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const descripcion =
+  "Mapa de los recursos turísticos del Perú según el Inventario Nacional de MINCETUR: sitios naturales, manifestaciones culturales, folclore y más.";
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Mapa turístico del Perú</title>
+    <meta name="description" content={descripcion} />
+    <meta name="theme-color" content="#f4f6f8" />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <link rel="preload" href={`${base}data/index.json`} as="fetch" crossorigin="anonymous" />
+  </head>
+  <body>
+    <a class="saltar" href="#buscar">Ir a la búsqueda</a>
+    <div class="app" data-hoja="media">
+      <aside class="panel" id="panel" aria-label="Recursos turísticos">
+        <button class="hoja-asa" id="hoja-asa" type="button" aria-controls="panel" aria-label="Expandir panel">
+          <span></span>
+        </button>
+
+        <header class="cabecera">
+          <h1>Mapa turístico <span>del Perú</span></h1>
+          <p class="subtitulo" id="subtitulo">Inventario Nacional de Recursos Turísticos</p>
+        </header>
+
+        <section class="vista vista-lista" id="vista-lista">
+          <div class="filtros">
+            <div class="buscador">
+              <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"
+                ><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"
+                ></circle><path d="m13 13 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                ></path></svg
+              >
+              <input
+                id="buscar"
+                type="search"
+                placeholder="Buscar por nombre, tipo o lugar"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Buscar recursos"
+              />
+            </div>
+
+            <div class="chips" id="chips" role="group" aria-label="Categorías"></div>
+
+            <details class="mas-filtros" id="mas-filtros">
+              <summary>
+                <span>Más filtros</span><span class="contador" id="contador-filtros" hidden></span>
+              </summary>
+              <div class="mas-filtros-cuerpo">
+                <label class="campo">
+                  <span>Región</span>
+                  <select id="f-region"><option value="">Todas las regiones</option></select>
+                </label>
+                <label class="campo">
+                  <span>Actividad</span>
+                  <select id="f-actividad"><option value="-1">Cualquier actividad</option></select>
+                </label>
+                <fieldset class="campo campo-ancho">
+                  <legend>Jerarquía mínima</legend>
+                  <div class="segmentos" id="f-jerarquia">
+                    <label><input type="radio" name="jer" value="0" checked /><span>Todas</span></label>
+                    <label><input type="radio" name="jer" value="1" /><span>1+</span></label>
+                    <label><input type="radio" name="jer" value="2" /><span>2+</span></label>
+                    <label><input type="radio" name="jer" value="3" /><span>3+</span></label>
+                    <label><input type="radio" name="jer" value="4" /><span>4</span></label>
+                  </div>
+                </fieldset>
+                <label class="interruptor campo-ancho">
+                  <input type="checkbox" id="f-libre" />
+                  <span>Solo ingreso libre</span>
+                </label>
+              </div>
+            </details>
+          </div>
+
+          <div class="resumen">
+            <p id="conteo" aria-live="polite">Cargando…</p>
+            <label class="interruptor interruptor-chico">
+              <input type="checkbox" id="f-zona" />
+              <span>Solo zona visible</span>
+            </label>
+            <button type="button" class="enlace" id="limpiar" hidden>Limpiar</button>
+          </div>
+
+          <div class="lista" id="lista" role="list" tabindex="-1">
+            <div class="lista-alto" id="lista-alto"></div>
+          </div>
+        </section>
+
+        <section class="vista vista-detalle" id="vista-detalle" hidden aria-live="polite"></section>
+
+        <footer class="pie">
+          <p>
+            Datos:{" "}
+            <a href="https://www.datosabiertos.gob.pe/dataset/inventario-nacional-de-recursos-tur%C3%ADsticos"
+              target="_blank" rel="noopener">Inventario Nacional de Recursos Turísticos</a>, MINCETUR, licencia{" "}
+            <a href="https://opendatacommons.org/licenses/by/1-0/" target="_blank" rel="noopener">ODC-BY</a>.
+            Fecha de corte: <span id="fecha-corte">—</span>.
+          </p>
+          <p>
+            Mapa: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, ©{" "}
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+          </p>
+        </footer>
+      </aside>
+
+      <main class="mapa" id="mapa" aria-label="Mapa"></main>
+    </div>
+
+    <script>
+      import "../scripts/app";
+    </script>
+  </body>
+</html>
