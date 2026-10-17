@@ -2,8 +2,10 @@ import { cargarDetalle, cargarIndice, CATEGORIAS, ORDEN_CATEGORIAS, type Indice,
 import { cabecera, cuerpo } from "./detalle";
 import { h } from "./dom";
 import { aplicar, escribirUrl, filtrosActivos, filtrosVacios, leerUrl, type Filtros } from "./filtros";
+import { crearAlmacen, leerRutaCompartida } from "./itinerario";
 import { crearLista } from "./lista";
 import { crearMapa, PERU, type MapaTuristico } from "./mapa";
+import { crearVistaRuta } from "./ruta";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -22,6 +24,10 @@ const conteo = $("conteo");
 const limpiar = $("limpiar");
 const vistaLista = $("vista-lista");
 const vistaDetalle = $("vista-detalle");
+const vistaRuta = $("vista-ruta");
+const pestanaExplorar = $("pestana-explorar");
+const pestanaRuta = $("pestana-ruta");
+const contadorRuta = $("contador-ruta");
 const asa = $("hoja-asa");
 
 const movil = matchMedia("(max-width: 760px)");
@@ -34,6 +40,10 @@ let seleccion: Recurso | null = null;
 /** el detalle se abrió con pushState y "volver" puede usar history.back() */
 let detalleEnHistorial = false;
 let temporizadorUrl = 0;
+
+type Pestana = "explorar" | "ruta";
+let pestana: Pestana = "explorar";
+const almacen = crearAlmacen();
 
 // --- Hoja inferior en móvil ---
 
@@ -197,6 +207,56 @@ function filtrosClaveMapa() {
   return [f.q, [...f.categorias].join(), f.region, f.jerarquiaMin, f.actividad, f.libre].join("|");
 }
 
+// --- Pestañas y ruta ---
+
+function mostrarPestana(p: Pestana) {
+  pestana = p;
+  pestanaExplorar.setAttribute("aria-pressed", String(p === "explorar"));
+  pestanaRuta.setAttribute("aria-pressed", String(p === "ruta"));
+  if (movil.matches && app.dataset.hoja === "mini") hoja("media");
+  // cerrar la ficha vuelve a la pestaña elegida
+  if (seleccion) cerrar();
+  else pintarPestana();
+}
+
+function pintarPestana() {
+  vistaLista.hidden = pestana !== "explorar";
+  vistaRuta.hidden = pestana !== "ruta";
+}
+
+pestanaExplorar.addEventListener("click", () => mostrarPestana("explorar"));
+pestanaRuta.addEventListener("click", () => mostrarPestana("ruta"));
+
+function pintarContadorRuta() {
+  const n = almacen.activo()?.paradas.length ?? 0;
+  contadorRuta.hidden = n === 0;
+  contadorRuta.textContent = String(n);
+}
+
+function botonRuta(r: Recurso): HTMLElement {
+  const dentro = almacen.contiene(r.id);
+  return h(
+    "div",
+    { class: "d-acciones d-acciones-ruta" },
+    h(
+      "button",
+      {
+        type: "button",
+        class: dentro ? "boton boton-sec" : "boton boton-ruta",
+        "aria-pressed": String(dentro),
+        onclick: () => almacen.alternar(r.id),
+      },
+      dentro ? `✓ En «${almacen.activo()?.nombre}» · Quitar` : "+ Agregar a la ruta"
+    )
+  );
+}
+
+almacen.alCambiar(() => {
+  pintarContadorRuta();
+  lista?.refrescar();
+  if (seleccion) vistaDetalle.querySelector(".d-acciones-ruta")?.replaceWith(botonRuta(seleccion));
+});
+
 // --- Detalle ---
 
 async function abrir(r: Recurso, { acercar = true, historial = true } = {}) {
@@ -208,8 +268,15 @@ async function abrir(r: Recurso, { acercar = true, historial = true } = {}) {
     detalleEnHistorial = true;
   }
 
-  vistaDetalle.replaceChildren(cabecera(r, cerrar), h("p", { class: "cargando" }, "Cargando ficha…"));
+  vistaDetalle.replaceChildren(
+    cabecera(r, cerrar, {
+      volver: pestana === "ruta" ? "Volver a la ruta" : "Volver a la lista",
+      accion: botonRuta(r),
+    }),
+    h("p", { class: "cargando" }, "Cargando ficha…")
+  );
   vistaLista.hidden = true;
+  vistaRuta.hidden = true;
   vistaDetalle.hidden = false;
   vistaDetalle.scrollTop = 0;
   panel.scrollTop = 0;
@@ -245,8 +312,8 @@ function cerrarVista() {
   mapa.seleccionar(null, false);
   vistaDetalle.hidden = true;
   vistaDetalle.replaceChildren();
-  vistaLista.hidden = false;
-  if (anterior) {
+  pintarPestana();
+  if (anterior && pestana === "explorar") {
     // devolver el foco a la fila si está pintada
     $("lista").querySelector<HTMLElement>(`[data-id="${anterior.id}"]`)?.focus({ preventScroll: true });
   }
@@ -313,8 +380,34 @@ async function iniciar() {
   });
 
   if (import.meta.env.DEV) Object.assign(window, { __mapa: mapa.mapa });
-  lista = crearLista($("lista"), $("lista-alto"), (r) => abrir(r));
+  lista = crearLista($("lista"), $("lista-alto"), {
+    alElegir: (r) => abrir(r),
+    enRuta: (r) => almacen.contiene(r.id),
+    alternarRuta: (r) => almacen.alternar(r.id),
+  });
   actualizar({ url: false });
+
+  const vistaRutaCtl = crearVistaRuta({
+    contenedor: vistaRuta,
+    indice,
+    almacen,
+    mapa,
+    alAbrir: (r) => abrir(r),
+  });
+  vistaRutaCtl.pintar();
+  pintarContadorRuta();
+
+  // ?ruta=...: se ofrece guardarla y se quita de la URL para no repetir la oferta
+  const compartida = leerRutaCompartida((id) => indice.porId.has(id));
+  if (compartida) {
+    const p = new URLSearchParams(location.search);
+    p.delete("ruta");
+    p.delete("nombre");
+    const qs = p.toString();
+    history.replaceState(null, "", location.pathname + (qs ? `?${qs}` : "") + location.hash);
+    vistaRutaCtl.mostrarCompartida(compartida);
+    mostrarPestana("ruta");
+  }
 
   const inicial = estado.seleccion !== null ? indice.porId.get(estado.seleccion) : undefined;
   if (inicial) hoja("media");

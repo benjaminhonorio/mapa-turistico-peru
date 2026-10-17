@@ -45,7 +45,11 @@ export function jerarquiaTexto(j: number, crudo?: string): string {
 }
 
 /** Cabecera que se pinta al instante con los datos del índice */
-export function cabecera(r: Recurso, alVolver: () => void): HTMLElement {
+export function cabecera(
+  r: Recurso,
+  alVolver: () => void,
+  { volver = "Volver a la lista", accion = null as Node | null } = {}
+): HTMLElement {
   const cat = CATEGORIAS[r.categoria];
   const lugar = [r.distrito, r.provincia !== r.distrito ? r.provincia : null, r.region].filter(Boolean).join(", ");
   return h(
@@ -55,12 +59,13 @@ export function cabecera(r: Recurso, alVolver: () => void): HTMLElement {
       "button",
       { type: "button", class: "volver", onclick: () => alVolver() },
       h("span", { "aria-hidden": "true" }, "←"),
-      " Volver a la lista"
+      ` ${volver}`
     ),
     h("p", { class: "d-categoria" }, h("span", { class: "punto", "aria-hidden": "true" }), cat.nombre),
     h("h2", { tabindex: "-1", id: "detalle-titulo" }, r.nombre),
     h("p", { class: "d-subtipo" }, [r.tipo, r.subtipo].filter(Boolean).join(" · ")),
     h("p", { class: "d-lugar" }, lugar),
+    accion,
     r.lat === null ? h("p", { class: "aviso" }, "Sin punto en el mapa: este recurso no tiene coordenadas en el inventario.") : null
   );
 }

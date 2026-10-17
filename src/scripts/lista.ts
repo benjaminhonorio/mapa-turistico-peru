@@ -6,11 +6,13 @@ import { h } from "./dom";
 const ALTO_FILA = 64;
 const EXTRA = 6;
 
-export function crearLista(
-  contenedor: HTMLElement,
-  alto: HTMLElement,
-  alElegir: (r: Recurso) => void
-) {
+export interface OpcionesLista {
+  alElegir: (r: Recurso) => void;
+  enRuta: (r: Recurso) => boolean;
+  alternarRuta: (r: Recurso) => void;
+}
+
+export function crearLista(contenedor: HTMLElement, alto: HTMLElement, o: OpcionesLista) {
   let items: Recurso[] = [];
   let pintadas = new Map<number, HTMLElement>();
   let pendiente = false;
@@ -20,7 +22,7 @@ export function crearLista(
     const lugar = [r.distrito, r.region].filter(Boolean).join(", ");
     return h(
       "div",
-      { role: "listitem", class: "fila", style: `transform:translateY(${i * ALTO_FILA}px)` },
+      { role: "listitem", class: "fila", "data-i": i, style: `transform:translateY(${i * ALTO_FILA}px)` },
       h(
         "button",
         {
@@ -28,7 +30,7 @@ export function crearLista(
           class: "fila-boton",
           style: `--cat:${cat.color}`,
           "data-id": r.id,
-          onclick: () => alElegir(r),
+          onclick: () => o.alElegir(r),
         },
         h("span", { class: `fila-punto${r.lat === null ? " sin-punto" : ""}`, "aria-hidden": "true" }),
         h(
@@ -45,7 +47,24 @@ export function crearLista(
         r.jerarquia > 0
           ? h("span", { class: `fila-jer j${r.jerarquia}`, title: `Jerarquía ${r.jerarquia}` }, String(r.jerarquia))
           : null
-      )
+      ),
+      botonRuta(r)
+    );
+  }
+
+  function botonRuta(r: Recurso): HTMLElement {
+    const dentro = o.enRuta(r);
+    return h(
+      "button",
+      {
+        type: "button",
+        class: "fila-ruta",
+        "aria-pressed": String(dentro),
+        "aria-label": `${dentro ? "Quitar de" : "Agregar a"} la ruta: ${r.nombre}`,
+        title: dentro ? "Quitar de la ruta" : "Agregar a la ruta",
+        onclick: () => o.alternarRuta(r),
+      },
+      dentro ? "✓" : "+"
     );
   }
 
@@ -80,6 +99,13 @@ export function crearLista(
       alto.style.height = `${items.length * ALTO_FILA}px`;
       if (volverArriba) contenedor.scrollTop = 0;
       pintar();
+    },
+    /** vuelve a dibujar las filas visibles (cambió la ruta) */
+    refrescar() {
+      for (const el of pintadas.values()) {
+        const r = items[Number(el.dataset.i)];
+        if (r) el.querySelector(".fila-ruta")?.replaceWith(botonRuta(r));
+      }
     },
   };
 }

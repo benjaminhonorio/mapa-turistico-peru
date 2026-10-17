@@ -11,6 +11,7 @@ Demo: https://benjaminhonorio.github.io/mapa-turistico-peru/
 - Lista ordenada por jerarquía y nombre, que incluye los recursos sin coordenadas (fiestas, platos, danzas) marcados como "sin punto".
 - Detalle de la ficha: descripción, ingreso, época y horario, cómo llegar, actividades, servicios, visitantes y enlaces a Google Maps y a la ficha original.
 - Estado en la URL (`?r=<código>&q=...&region=...`) para compartir enlaces.
+- Itinerarios ("Mi ruta"): agrega recursos desde la lista o la ficha, ordénalos y guárdalos en el navegador (localStorage). Se dibujan numerados en el mapa, se pueden seguir con la ubicación del teléfono (siguiente parada y distancia), abrir en Google Maps, compartir por enlace (`?ruta=<códigos>&nombre=...`) y exportar o importar como JSON.
 
 ## Desarrollo
 

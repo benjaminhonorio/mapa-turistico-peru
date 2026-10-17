@@ -13,6 +13,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import urlWorker from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { CATEGORIAS, type Recurso } from "./data";
 import type { Limites } from "./filtros";
+import type { Coordenada } from "./itinerario";
 
 const ESTILO = "https://tiles.openfreemap.org/styles/positron";
 const DEM = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
@@ -22,8 +23,19 @@ export const PERU: LngLatBoundsLike = [
 ];
 
 const TINTA = "#14203a";
+/** distinto de los colores de categoría */
+const RUTA = "#e8590c";
 
 type Punto = Feature<Point, { id: number; n: string; c: number; j: number; v: number }>;
+
+/** Parada del itinerario activo, ya con coordenadas */
+export interface ParadaMapa extends Coordenada {
+  id: number;
+  nombre: string;
+  numero: number;
+  visitada: boolean;
+  siguiente: boolean;
+}
 
 export interface OpcionesMapa {
   contenedor: HTMLElement;
@@ -40,6 +52,9 @@ export interface MapaTuristico {
   seleccionar: (r: Recurso | null, acercar: boolean) => void;
   limites: () => Limites;
   ajustarPadding: (padding: Partial<maplibregl.PaddingOptions>) => void;
+  mostrarRuta: (paradas: ParadaMapa[]) => void;
+  mostrarPosicion: (c: Coordenada | null) => void;
+  encuadrar: (puntos: Coordenada[]) => void;
 }
 
 const reducirMovimiento = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -99,6 +114,8 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
 
   let pendiente: Set<number> | null = null;
   let seleccionado: Recurso | null = null;
+  let ruta: ParadaMapa[] = [];
+  let posicion: Coordenada | null = null;
 
   const listo = new Promise<void>((resolve) => {
     mapa.on("load", () => {
@@ -150,6 +167,29 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
       promoteId: "id",
     });
     mapa.addSource("seleccion", { type: "geojson", data: vacio() });
+    mapa.addSource("ruta-linea", { type: "geojson", data: lineaRuta() });
+    mapa.addSource("ruta-paradas", { type: "geojson", data: paradasRuta() });
+    mapa.addSource("posicion", { type: "geojson", data: puntoPosicion() });
+
+    // La línea va debajo de los puntos para no tapar recursos cercanos
+    mapa.addLayer({
+      id: "ruta-borde",
+      type: "line",
+      source: "ruta-linea",
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 4, 4, 12, 7] },
+    });
+    mapa.addLayer({
+      id: "ruta-trazo",
+      type: "line",
+      source: "ruta-linea",
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: {
+        "line-color": RUTA,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 4, 2, 12, 3.5],
+        "line-dasharray": [2, 1.5],
+      },
+    });
 
     mapa.addLayer({
       id: "recursos-punto",
@@ -225,6 +265,49 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
       });
     }
 
+    // Paradas numeradas y ubicación, encima de todo
+    mapa.addLayer({
+      id: "ruta-punto",
+      type: "circle",
+      source: "ruta-paradas",
+      paint: {
+        "circle-radius": ["case", ["get", "siguiente"], 13, 11],
+        "circle-color": ["case", ["get", "visitada"], "#ffffff", RUTA],
+        "circle-stroke-color": ["case", ["get", "visitada"], RUTA, ["get", "siguiente"], TINTA, "#ffffff"],
+        "circle-stroke-width": ["case", ["get", "siguiente"], 3, 2],
+      },
+    });
+    mapa.addLayer({
+      id: "ruta-numero",
+      type: "symbol",
+      source: "ruta-paradas",
+      layout: {
+        "text-field": ["to-string", ["get", "numero"]],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": 12,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+      },
+      paint: { "text-color": ["case", ["get", "visitada"], RUTA, "#ffffff"] },
+    });
+    mapa.addLayer({
+      id: "posicion-halo",
+      type: "circle",
+      source: "posicion",
+      paint: { "circle-radius": 18, "circle-color": "rgba(26, 115, 232, 0.18)" },
+    });
+    mapa.addLayer({
+      id: "posicion-punto",
+      type: "circle",
+      source: "posicion",
+      paint: {
+        "circle-radius": 7,
+        "circle-color": "#1a73e8",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2.5,
+      },
+    });
+
     // Hover y clic
     const popup = new maplibregl.Popup({
       closeButton: false,
@@ -234,7 +317,7 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
       maxWidth: "260px",
     });
     let hover: number | null = null;
-    const capas = ["recursos-punto", "etiqueta-0", "etiqueta-2", "etiqueta-3", "etiqueta-4"];
+    const capas = ["ruta-punto", "recursos-punto", "etiqueta-0", "etiqueta-2", "etiqueta-3", "etiqueta-4"];
 
     const quitarHover = () => {
       if (hover !== null) mapa.setFeatureState({ source: "recursos", id: hover }, { hover: false });
@@ -274,6 +357,7 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
         );
       }
       if (!hits.length) return;
+      // las paradas de la ruta van primero (j = 5)
       hits.sort((a, b) => (b.properties.j as number) - (a.properties.j as number));
       o.alSeleccionar(hits[0].properties.id as number);
     });
@@ -284,6 +368,56 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
 
   function vacio(): FeatureCollection {
     return { type: "FeatureCollection", features: [] };
+  }
+
+  function lineaRuta(): FeatureCollection {
+    if (ruta.length < 2) return vacio();
+    return {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: { type: "LineString", coordinates: ruta.map((p) => [p.lng, p.lat]) }, properties: {} },
+      ],
+    };
+  }
+
+  function paradasRuta(): FeatureCollection {
+    return {
+      type: "FeatureCollection",
+      // la siguiente al final para que quede encima
+      features: [...ruta]
+        .sort((a, b) => Number(a.siguiente) - Number(b.siguiente))
+        .map((p) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [p.lng, p.lat] },
+          properties: { id: p.id, n: p.nombre, j: 5, numero: p.numero, visitada: p.visitada, siguiente: p.siguiente },
+        })),
+    };
+  }
+
+  function puntoPosicion(): FeatureCollection {
+    if (!posicion) return vacio();
+    return {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [posicion.lng, posicion.lat] }, properties: {} }],
+    };
+  }
+
+  function mostrarRuta(paradas: ParadaMapa[]) {
+    ruta = paradas;
+    mapa.getSource<GeoJSONSource>("ruta-linea")?.setData(lineaRuta());
+    mapa.getSource<GeoJSONSource>("ruta-paradas")?.setData(paradasRuta());
+  }
+
+  function mostrarPosicion(c: Coordenada | null) {
+    posicion = c;
+    mapa.getSource<GeoJSONSource>("posicion")?.setData(puntoPosicion());
+  }
+
+  function encuadrar(puntos: Coordenada[]) {
+    if (!puntos.length) return;
+    const caja = new maplibregl.LngLatBounds();
+    for (const p of puntos) caja.extend([p.lng, p.lat]);
+    mapa.fitBounds(caja, { padding: 56, maxZoom: 13, duration: reducirMovimiento() ? 0 : 800 });
   }
 
   function filtrar(ids: Set<number>): Punto[] {
@@ -335,5 +469,5 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
     mapa.setPadding(nuevo);
   }
 
-  return { mapa, listo, mostrar, seleccionar, limites, ajustarPadding };
+  return { mapa, listo, mostrar, seleccionar, limites, ajustarPadding, mostrarRuta, mostrarPosicion, encuadrar };
 }

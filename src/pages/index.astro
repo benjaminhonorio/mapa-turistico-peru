@@ -32,6 +32,13 @@ const descripcion =
           <p class="subtitulo" id="subtitulo">Inventario Nacional de Recursos Turísticos</p>
         </header>
 
+        <nav class="pestanas" aria-label="Secciones">
+          <button type="button" class="pestana" id="pestana-explorar" aria-pressed="true">Explorar</button>
+          <button type="button" class="pestana" id="pestana-ruta" aria-pressed="false">
+            Mi ruta <span class="contador" id="contador-ruta" hidden></span>
+          </button>
+        </nav>
+
         <section class="vista vista-lista" id="vista-lista">
           <div class="filtros">
             <div class="buscador">
@@ -96,6 +103,8 @@ const descripcion =
             <div class="lista-alto" id="lista-alto"></div>
           </div>
         </section>
+
+        <section class="vista vista-ruta" id="vista-ruta" hidden aria-label="Mi ruta"></section>
 
         <section class="vista vista-detalle" id="vista-detalle" hidden aria-live="polite"></section>
 
