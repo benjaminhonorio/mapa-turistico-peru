@@ -12,6 +12,8 @@
   --serif: "Literata Variable", Georgia, "Times New Roman", serif;
   --radio: 10px;
   --ruta: #e8590c;
+  /* igual que CATEGORIAS[0] en data.ts */
+  --propio: #0b7285;
   color-scheme: light;
 }
 
@@ -1057,6 +1059,152 @@ a {
 .icono:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+/* --- Mis lugares --- */
+
+.parada.propia .ruta-num {
+  background: var(--propio);
+}
+
+.parada.propia.visitada .ruta-num {
+  background: var(--fondo);
+  color: var(--propio);
+  box-shadow: inset 0 0 0 2px var(--propio);
+}
+
+.lugares {
+  margin-top: 24px;
+}
+
+.lugares-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.lugares-cabecera h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.lugares-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--linea);
+}
+
+.lugar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding-left: 14px;
+  border-bottom: 1px solid var(--linea);
+  position: relative;
+}
+
+.lugar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--propio);
+}
+
+.lugar .fila-ruta {
+  margin: 0;
+}
+
+.lugar .fila-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lugar-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.lugar-form .ruta-titulo {
+  margin-bottom: 0;
+}
+
+.lugar-input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--linea-fuerte);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+
+.lugar-input:focus {
+  outline: none;
+  border-color: var(--foco);
+  box-shadow: 0 0 0 3px rgb(58 74 184 / 0.16);
+}
+
+.lugar-ubicacion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radio);
+  background: var(--superficie);
+  border: 1px dashed var(--linea-fuerte);
+}
+
+.lugar-ubicacion:has(.listo) {
+  border-style: solid;
+  border-color: var(--propio);
+}
+
+.lugar-estado {
+  margin: 0;
+  color: var(--tinta-2);
+  font-size: 14px;
+}
+
+.lugar-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tinta-2);
+  cursor: pointer;
+}
+
+.lugar-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ruta);
+}
+
+.lugar-form .d-acciones {
+  align-items: center;
+  margin: 0;
+}
+
+.lugar-form button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.eligiendo .maplibregl-canvas {
+  cursor: crosshair;
 }
 
 .ruta-pie {

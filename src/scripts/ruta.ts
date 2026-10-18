@@ -7,13 +7,16 @@ import {
   distancia,
   enlaceCompartir,
   enlaceIndicaciones,
+  exportable,
   km,
   leerExportado,
   MAX_INTERMEDIOS,
   type Almacenamiento,
   type Coordenada,
   type Itinerario,
+  type ParadaExterna,
 } from "./itinerario";
+import { esPropio, type Lugares } from "./lugares";
 import type { MapaTuristico, ParadaMapa } from "./mapa";
 
 /** a menos de esto se sugiere marcar la parada como visitada */
@@ -24,7 +27,10 @@ export interface OpcionesRuta {
   indice: Indice;
   almacen: Almacenamiento;
   mapa: MapaTuristico;
+  lugares: Lugares;
   alAbrir: (r: Recurso) => void;
+  /** el formulario de un lugar necesita el mapa a la vista (en el móvil, la hoja no llena) */
+  alUbicar: () => void;
 }
 
 interface Seguimiento {
@@ -41,9 +47,11 @@ interface Fila {
 }
 
 export function crearVistaRuta(o: OpcionesRuta) {
-  const { contenedor, indice, almacen, mapa } = o;
+  const { contenedor, indice, almacen, mapa, lugares } = o;
   let seguimiento: Seguimiento | null = null;
-  let compartida: { nombre: string; ids: number[] } | null = null;
+  let compartida: { nombre: string; paradas: ParadaExterna[] } | null = null;
+  /** formulario de "Mis lugares" abierto: se conserva entre repintados para no perder lo escrito */
+  let formulario: HTMLElement | null = null;
   let mensaje = "";
   let temporizadorMensaje = 0;
   /** encuadrar ruta y posición con el primer dato de GPS */
@@ -55,7 +63,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
     importador.value = "";
     if (!archivo) return;
     try {
-      const rutas = leerExportado(await archivo.text(), (id) => indice.porId.has(id));
+      const rutas = leerExportado(await archivo.text(), (id) => indice.porId.has(id), lugares.resolver);
       if (!rutas.length) return avisar("El archivo no tiene rutas válidas.");
       for (const r of rutas) almacen.crear(r.nombre, r.paradas);
       avisar(rutas.length === 1 ? `Importada «${rutas[0].nombre}».` : `${rutas.length} rutas importadas.`);
@@ -151,7 +159,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
   }
 
   async function compartir(i: Itinerario) {
-    const url = enlaceCompartir(i);
+    const url = enlaceCompartir(i, lugares.obtener);
     if (navigator.share) {
       try {
         await navigator.share({ title: i.nombre, url });
@@ -169,7 +177,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
   }
 
   function exportar(i: Itinerario) {
-    const blob = new Blob([JSON.stringify(i, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(exportable(i, lugares.obtener), null, 2)], { type: "application/json" });
     const a = h("a", {
       href: URL.createObjectURL(blob),
       download: `${i.nombre.normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "ruta"}.json`,
@@ -182,6 +190,192 @@ export function crearVistaRuta(o: OpcionesRuta) {
     if (!confirm(`¿Eliminar la ruta «${i.nombre}»? No se puede deshacer.`)) return;
     dejarDeSeguir();
     almacen.eliminar(i.id);
+  }
+
+  // --- Mis lugares ---
+
+  function abrirFormulario(id: number | null) {
+    cerrarFormulario();
+    const existente = id === null ? undefined : lugares.obtener(id);
+    let punto: Coordenada | null = existente ? { lat: existente.lat, lng: existente.lng } : null;
+
+    const nombre = h("input", {
+      type: "text",
+      class: "lugar-input",
+      maxlength: 80,
+      required: true,
+      autocomplete: "off",
+      placeholder: "Ej. Mirador de la laguna",
+      value: existente?.nombre ?? "",
+    });
+    const nota = h("textarea", { class: "lugar-input", rows: 2, maxlength: 500, placeholder: "Cómo llegar, horario, lo que quieras recordar" });
+    nota.value = existente?.nota ?? "";
+    const estado = h("p", { class: "lugar-estado", "aria-live": "polite" });
+    const agregar = h("input", { type: "checkbox", checked: true });
+    const guardar = h("button", { type: "submit", class: "boton" }, existente ? "Guardar cambios" : "Guardar lugar");
+    const ruta = almacen.activo();
+
+    function refrescar(texto?: string) {
+      estado.textContent =
+        texto ??
+        (punto
+          ? `Ubicado en ${punto.lat.toFixed(5)}, ${punto.lng.toFixed(5)}. Arrastra el pin o toca otro punto para ajustarlo.`
+          : "Toca el mapa donde está el lugar, o usa tu ubicación.");
+      estado.classList.toggle("listo", !!punto);
+      guardar.disabled = !punto || !nombre.value.trim();
+    }
+
+    function elegido(c: Coordenada) {
+      punto = c;
+      refrescar();
+    }
+
+    function miUbicacion() {
+      if (!("geolocation" in navigator) || !isSecureContext) return refrescar("Este navegador no permite obtener tu ubicación.");
+      refrescar("Buscando tu ubicación…");
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          if (formulario !== el) return;
+          punto = { lat: p.coords.latitude, lng: p.coords.longitude };
+          mapa.elegirPunto(elegido, punto);
+          refrescar();
+        },
+        (e) =>
+          formulario === el &&
+          refrescar(
+            e.code === e.PERMISSION_DENIED
+              ? "Sin permiso para usar tu ubicación. Actívalo en los ajustes del navegador o toca el mapa."
+              : "No se pudo obtener tu ubicación. Toca el mapa para ubicarlo."
+          ),
+        { enableHighAccuracy: true, timeout: 20_000, maximumAge: 30_000 }
+      );
+    }
+
+    const el: HTMLElement = h(
+      "form",
+      {
+        class: "lugar-form",
+        novalidate: true,
+        onsubmit: (e: Event) => {
+          e.preventDefault();
+          if (!punto || !nombre.value.trim()) return;
+          const datos = { nombre: nombre.value, nota: nota.value, ...punto };
+          cerrarFormulario(false);
+          if (existente) {
+            lugares.editar(existente.id, datos);
+            avisar(`«${datos.nombre.trim()}» actualizado.`);
+          } else {
+            const nuevo = lugares.crear(datos);
+            if (agregar.checked) almacen.alternar(nuevo.id);
+            avisar(agregar.checked ? `«${nuevo.nombre}» agregado a la ruta.` : `«${nuevo.nombre}» guardado en Mis lugares.`);
+          }
+        },
+      },
+      h("h2", { class: "ruta-titulo" }, existente ? "Editar lugar" : "Nuevo lugar"),
+      h("label", { class: "campo" }, h("span", null, "Nombre"), nombre),
+      h("label", { class: "campo" }, h("span", null, "Nota (opcional)"), nota),
+      h(
+        "div",
+        { class: "lugar-ubicacion" },
+        estado,
+        boton("Usar mi ubicación", miUbicacion)
+      ),
+      existente
+        ? null
+        : h(
+            "label",
+            { class: "lugar-check" },
+            agregar,
+            ruta ? ` Agregar a «${ruta.nombre}»` : " Agregar a una ruta nueva"
+          ),
+      h(
+        "div",
+        { class: "d-acciones" },
+        guardar,
+        boton("Cancelar", () => cerrarFormulario()),
+        existente ? boton("Eliminar lugar", () => eliminarLugar(existente.id), "enlace enlace-peligro") : null
+      )
+    );
+    nombre.addEventListener("input", () => refrescar());
+
+    formulario = el;
+    refrescar();
+    mapa.elegirPunto(elegido, punto);
+    o.alUbicar();
+    pintar();
+    contenedor.scrollTop = 0;
+    nombre.focus({ preventScroll: true });
+  }
+
+  function cerrarFormulario(repintar = true) {
+    if (!formulario) return;
+    formulario = null;
+    mapa.elegirPunto(null);
+    if (repintar) pintar();
+  }
+
+  function eliminarLugar(id: number) {
+    const l = lugares.obtener(id);
+    if (!l) return;
+    const usos = almacen.lista().filter((i) => i.paradas.some((p) => p.id === id)).length;
+    const aviso = usos ? ` Se quitará de ${usos === 1 ? "1 ruta" : `${usos} rutas`}.` : "";
+    if (!confirm(`¿Eliminar «${l.nombre}» de Mis lugares?${aviso} No se puede deshacer.`)) return;
+    cerrarFormulario(false);
+    lugares.eliminar(id);
+    if (usos) almacen.quitarDeTodas(id);
+    else pintar();
+  }
+
+  function seccionLugares(): HTMLElement {
+    const lista = lugares.lista();
+    const activa = almacen.activo();
+    return h(
+      "section",
+      { class: "lugares" },
+      h(
+        "div",
+        { class: "lugares-cabecera" },
+        h("h3", null, "Mis lugares"),
+        boton("+ Nuevo lugar", () => abrirFormulario(null), "boton boton-sec")
+      ),
+      lista.length
+        ? h(
+            "ul",
+            { class: "lugares-lista" },
+            lista.map((l) => {
+              const dentro = !!activa?.paradas.some((p) => p.id === l.id);
+              const r = indice.porId.get(l.id);
+              return h(
+                "li",
+                { class: "lugar" },
+                h(
+                  "button",
+                  { type: "button", class: "parada-texto", onclick: () => r && o.alAbrir(r) },
+                  h("span", { class: "fila-nombre" }, l.nombre),
+                  l.nota ? h("span", { class: "fila-meta" }, l.nota) : null
+                ),
+                h(
+                  "button",
+                  {
+                    type: "button",
+                    class: "fila-ruta",
+                    "aria-pressed": String(dentro),
+                    "aria-label": `${dentro ? "Quitar de" : "Agregar a"} la ruta: ${l.nombre}`,
+                    title: dentro ? "Quitar de la ruta" : "Agregar a la ruta",
+                    "data-foco": `l${l.id}`,
+                    onclick: () => almacen.alternar(l.id),
+                  },
+                  dentro ? "✓" : "+"
+                )
+              );
+            })
+          )
+        : h(
+            "p",
+            { class: "ruta-ayuda" },
+            "¿Falta un sitio? Agrégalo tocando el mapa o con tu ubicación, y úsalo en tus rutas."
+          )
+    );
   }
 
   // --- Arrastrar para reordenar ---
@@ -285,6 +479,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
         "Arma un itinerario con los lugares que quieres visitar. Se guarda en este navegador y puedes seguirlo con tu ubicación."
       ),
       h("div", { class: "d-acciones" }, boton("Crear ruta", nueva, "boton"), boton("Importar archivo", () => importador.click())),
+      seccionLugares(),
     ];
   }
 
@@ -294,7 +489,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
     return h(
       "div",
       { class: "ruta-aviso", role: "status" },
-      h("p", null, "Te compartieron ", h("strong", null, c.nombre), ` (${c.ids.length} ${c.ids.length === 1 ? "parada" : "paradas"}).`),
+      h("p", null, "Te compartieron ", h("strong", null, c.nombre), ` (${c.paradas.length} ${c.paradas.length === 1 ? "parada" : "paradas"}).`),
       h(
         "div",
         { class: "d-acciones" },
@@ -302,7 +497,9 @@ export function crearVistaRuta(o: OpcionesRuta) {
           "Guardar en mis rutas",
           () => {
             compartida = null;
-            almacen.crear(c.nombre, c.ids.map((id) => ({ id, visitada: false })));
+            // los lugares propios de quien compartió pasan a Mis lugares (sin duplicar si ya estaban)
+            const ids = c.paradas.map((p) => (typeof p === "number" ? p : lugares.resolver(p)));
+            almacen.crear(c.nombre, [...new Set(ids)].map((id) => ({ id, visitada: false })));
             verEnMapa();
           },
           "boton"
@@ -379,7 +576,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
     const anterior = f[k - 1];
     const cat = CATEGORIAS[r.categoria];
     const tramo = anterior && conPunto(anterior.r) && conPunto(r) ? distancia(anterior.r, r) : null;
-    const meta = [r.region, tramo !== null ? `+${km(tramo)}` : null, conPunto(r) ? null : "sin punto en el mapa"]
+    const meta = [esPropio(r.id) ? "Mi lugar" : r.region, tramo !== null ? `+${km(tramo)}` : null, conPunto(r) ? null : "sin punto en el mapa"]
       .filter(Boolean)
       .join(" · ");
     const visitada = h("input", {
@@ -410,7 +607,11 @@ export function crearVistaRuta(o: OpcionesRuta) {
     });
     return h(
       "li",
-      { class: `parada${x.visitada ? " visitada" : ""}`, style: `--cat:${cat.color}`, "data-id": r.id },
+      {
+        class: `parada${x.visitada ? " visitada" : ""}${esPropio(r.id) ? " propia" : ""}`,
+        style: `--cat:${cat.color}`,
+        "data-id": r.id,
+      },
       manija,
       h(
         "button",
@@ -494,8 +695,9 @@ export function crearVistaRuta(o: OpcionesRuta) {
         : h(
             "p",
             { class: "ruta-ayuda" },
-            "Aún no hay paradas. Usa «+» en la lista o «Agregar a la ruta» en la ficha de un recurso."
+            "Aún no hay paradas. Usa «+» en la lista, «Agregar a la ruta» en la ficha de un recurso o agrega uno de Mis lugares."
           ),
+      seccionLugares(),
       h(
         "div",
         { class: "ruta-pie" },
@@ -519,8 +721,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
       h(
         "div",
         { class: "ruta-vista" },
-        avisoCompartida(),
-        ...(i ? vistaItinerario(i) : vistaVacia()),
+        ...(formulario ? [formulario] : [avisoCompartida(), ...(i ? vistaItinerario(i) : vistaVacia())]),
         mensaje ? h("p", { class: "ruta-mensaje", role: "status" }, mensaje) : null,
         importador
       )
@@ -532,6 +733,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
   }
 
   function pintarMapa() {
+    mapa.mostrarLugares(lugares.lista());
     const i = almacen.activo();
     const f = i ? filas(i) : [];
     const sig = siguiente(f);
@@ -563,11 +765,14 @@ export function crearVistaRuta(o: OpcionesRuta) {
   }
 
   almacen.alCambiar(pintar);
+  lugares.alCambiar(pintar);
 
   return {
     pintar,
     verEnMapa,
-    mostrarCompartida(c: { nombre: string; ids: number[] }) {
+    editarLugar: (id: number) => abrirFormulario(id),
+    cerrarFormulario: () => cerrarFormulario(),
+    mostrarCompartida(c: { nombre: string; paradas: ParadaExterna[] }) {
       compartida = c;
       pintar();
     },

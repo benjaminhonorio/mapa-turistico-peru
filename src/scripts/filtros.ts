@@ -95,7 +95,8 @@ export function leerUrl(actividades: string[]): { filtros: Filtros; seleccion: n
   f.libre = p.get("libre") === "1";
   f.zona = p.get("zona") === "1";
   const r = Number(p.get("r"));
-  return { filtros: f, seleccion: Number.isInteger(r) && r > 0 ? r : null };
+  // negativo: uno de "Mis lugares"
+  return { filtros: f, seleccion: Number.isInteger(r) && r !== 0 ? r : null };
 }
 
 export function escribirUrl(

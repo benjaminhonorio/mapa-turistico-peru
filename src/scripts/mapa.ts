@@ -11,7 +11,7 @@ import type { Feature, FeatureCollection, Point } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 // MapLibre arma la URL de su worker en tiempo de ejecución y Vite no la detecta: se la damos explícita
 import urlWorker from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { CATEGORIAS, type Recurso } from "./data";
+import { CATEGORIA_PROPIA, CATEGORIAS, type Recurso } from "./data";
 import type { Limites } from "./filtros";
 import type { Coordenada } from "./itinerario";
 
@@ -25,6 +25,7 @@ export const PERU: LngLatBoundsLike = [
 const TINTA = "#14203a";
 /** distinto de los colores de categoría */
 const RUTA = "#e8590c";
+const PROPIO = CATEGORIAS[CATEGORIA_PROPIA].color;
 
 type Punto = Feature<Point, { id: number; n: string; c: number; j: number; v: number }>;
 
@@ -35,6 +36,12 @@ export interface ParadaMapa extends Coordenada {
   numero: number;
   visitada: boolean;
   siguiente: boolean;
+}
+
+/** Un lugar de "Mis lugares" */
+export interface LugarMapa extends Coordenada {
+  id: number;
+  nombre: string;
 }
 
 export interface OpcionesMapa {
@@ -55,6 +62,9 @@ export interface MapaTuristico {
   mostrarRuta: (paradas: ParadaMapa[]) => void;
   mostrarPosicion: (c: Coordenada | null) => void;
   encuadrar: (puntos: Coordenada[]) => void;
+  mostrarLugares: (lugares: LugarMapa[]) => void;
+  /** modo para ubicar un lugar: cada toque (o arrastre del pin) llama a `alElegir`; null lo apaga */
+  elegirPunto: (alElegir: ((c: Coordenada) => void) | null, inicial?: Coordenada | null) => void;
 }
 
 const reducirMovimiento = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -116,6 +126,9 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
   let seleccionado: Recurso | null = null;
   let ruta: ParadaMapa[] = [];
   let posicion: Coordenada | null = null;
+  let lugares: LugarMapa[] = [];
+  let eligiendo: ((c: Coordenada) => void) | null = null;
+  let pin: maplibregl.Marker | null = null;
 
   const listo = new Promise<void>((resolve) => {
     mapa.on("load", () => {
@@ -170,6 +183,7 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
     mapa.addSource("ruta-linea", { type: "geojson", data: lineaRuta() });
     mapa.addSource("ruta-paradas", { type: "geojson", data: paradasRuta() });
     mapa.addSource("posicion", { type: "geojson", data: puntoPosicion() });
+    mapa.addSource("lugares", { type: "geojson", data: puntosLugares() });
 
     // La línea va debajo de los puntos para no tapar recursos cercanos
     mapa.addLayer({
@@ -214,6 +228,39 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
           9, ["case", ["boolean", ["feature-state", "hover"], false], 2.2, [">=", ["get", "j"], 3], 1.8, 1.2],
         ],
         "circle-opacity": ["match", ["get", "j"], 0, 0.82, 1, 0.9, 1],
+      },
+    });
+
+    // Mis lugares: color propio y borde grueso para distinguirlos de los recursos del inventario
+    mapa.addLayer({
+      id: "lugares-punto",
+      type: "circle",
+      source: "lugares",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 5, 12, 8],
+        "circle-color": PROPIO,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2.5,
+      },
+    });
+    mapa.addLayer({
+      id: "lugares-etiqueta",
+      type: "symbol",
+      source: "lugares",
+      minzoom: 8,
+      layout: {
+        "text-field": ["get", "n"],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": 12,
+        "text-max-width": 9,
+        "text-variable-anchor": ["left", "right", "top", "bottom"],
+        "text-radial-offset": 0.9,
+        "text-padding": 2,
+      },
+      paint: {
+        "text-color": PROPIO,
+        "text-halo-color": "rgba(255,255,255,0.92)",
+        "text-halo-width": 1.6,
       },
     });
 
@@ -317,10 +364,10 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
       maxWidth: "260px",
     });
     let hover: number | null = null;
-    const capas = ["ruta-punto", "recursos-punto", "etiqueta-0", "etiqueta-2", "etiqueta-3", "etiqueta-4"];
+    const capas = ["ruta-punto", "lugares-punto", "lugares-etiqueta", "recursos-punto", "etiqueta-0", "etiqueta-2", "etiqueta-3", "etiqueta-4"];
 
     const quitarHover = () => {
-      if (hover !== null) mapa.setFeatureState({ source: "recursos", id: hover }, { hover: false });
+      if (hover !== null && hover > 0) mapa.setFeatureState({ source: "recursos", id: hover }, { hover: false });
       hover = null;
       popup.remove();
       mapa.getCanvas().style.cursor = "";
@@ -336,7 +383,7 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
         quitarHover();
         mapa.getCanvas().style.cursor = "pointer";
         hover = id;
-        mapa.setFeatureState({ source: "recursos", id }, { hover: true });
+        if (id > 0) mapa.setFeatureState({ source: "recursos", id }, { hover: true });
         const coords = (f.geometry as Point).coordinates as [number, number];
         popup.setLngLat(coords).setText(f.properties.n as string).addTo(mapa);
       });
@@ -345,6 +392,11 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
 
     // Clic exacto sobre punto o etiqueta; si no, lo más cercano en 10 px (el dedo tapa el punto)
     mapa.on("click", (ev) => {
+      if (eligiendo) {
+        ponerPin({ lat: ev.lngLat.lat, lng: ev.lngLat.lng });
+        eligiendo({ lat: ev.lngLat.lat, lng: ev.lngLat.lng });
+        return;
+      }
       let hits = mapa.queryRenderedFeatures(ev.point, { layers: capas });
       if (!hits.length) {
         const { x, y } = ev.point;
@@ -357,7 +409,7 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
         );
       }
       if (!hits.length) return;
-      // las paradas de la ruta van primero (j = 5)
+      // las paradas de la ruta van primero (j = 5), luego mis lugares (j = 4.5)
       hits.sort((a, b) => (b.properties.j as number) - (a.properties.j as number));
       o.alSeleccionar(hits[0].properties.id as number);
     });
@@ -392,6 +444,54 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
           properties: { id: p.id, n: p.nombre, j: 5, numero: p.numero, visitada: p.visitada, siguiente: p.siguiente },
         })),
     };
+  }
+
+  function puntosLugares(): FeatureCollection {
+    return {
+      type: "FeatureCollection",
+      features: lugares.map((l) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [l.lng, l.lat] },
+        properties: { id: l.id, n: l.nombre, j: 4.5 },
+      })),
+    };
+  }
+
+  function mostrarLugares(l: LugarMapa[]) {
+    lugares = l;
+    mapa.getSource<GeoJSONSource>("lugares")?.setData(puntosLugares());
+  }
+
+  function ponerPin(c: Coordenada | null) {
+    if (!c) {
+      pin?.remove();
+      pin = null;
+      return;
+    }
+    if (pin) {
+      pin.setLngLat([c.lng, c.lat]);
+      return;
+    }
+    // la posición antes de addTo: si no, el primer cuadro lo pinta en la esquina superior izquierda
+    pin = new maplibregl.Marker({ color: PROPIO, draggable: true }).setLngLat([c.lng, c.lat]);
+    pin.on("dragend", () => {
+      const p = pin?.getLngLat();
+      if (p && eligiendo) eligiendo({ lat: p.lat, lng: p.lng });
+    });
+    pin.addTo(mapa);
+  }
+
+  function elegirPunto(alElegir: ((c: Coordenada) => void) | null, inicial?: Coordenada | null) {
+    eligiendo = alElegir;
+    o.contenedor.classList.toggle("eligiendo", !!alElegir);
+    if (!alElegir) return ponerPin(null);
+    if (inicial === undefined) return;
+    ponerPin(inicial);
+    if (inicial) {
+      const zoom = Math.max(mapa.getZoom(), 14);
+      if (reducirMovimiento()) mapa.jumpTo({ center: [inicial.lng, inicial.lat], zoom });
+      else mapa.flyTo({ center: [inicial.lng, inicial.lat], zoom, speed: 1.6 });
+    }
   }
 
   function puntoPosicion(): FeatureCollection {
@@ -469,5 +569,17 @@ export function crearMapa(o: OpcionesMapa): MapaTuristico {
     mapa.setPadding(nuevo);
   }
 
-  return { mapa, listo, mostrar, seleccionar, limites, ajustarPadding, mostrarRuta, mostrarPosicion, encuadrar };
+  return {
+    mapa,
+    listo,
+    mostrar,
+    seleccionar,
+    limites,
+    ajustarPadding,
+    mostrarRuta,
+    mostrarPosicion,
+    encuadrar,
+    mostrarLugares,
+    elegirPunto,
+  };
 }

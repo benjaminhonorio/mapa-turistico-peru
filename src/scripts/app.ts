@@ -1,8 +1,9 @@
 import { cargarDetalle, cargarIndice, CATEGORIAS, ORDEN_CATEGORIAS, type Indice, type Recurso } from "./data";
 import { cabecera, cuerpo } from "./detalle";
-import { h } from "./dom";
+import { h, parrafos } from "./dom";
 import { aplicar, escribirUrl, filtrosActivos, filtrosVacios, leerUrl, type Filtros } from "./filtros";
-import { crearAlmacen, leerRutaCompartida } from "./itinerario";
+import { conPunto, crearAlmacen, enlaceIndicaciones, leerRutaCompartida } from "./itinerario";
+import { crearLugares, esPropio, type Lugares } from "./lugares";
 import { crearLista } from "./lista";
 import { crearMapa, PERU, type MapaTuristico } from "./mapa";
 import { crearVistaRuta } from "./ruta";
@@ -44,6 +45,8 @@ let temporizadorUrl = 0;
 type Pestana = "explorar" | "ruta";
 let pestana: Pestana = "explorar";
 const almacen = crearAlmacen();
+let lugares: Lugares;
+let vistaRutaCtl: ReturnType<typeof crearVistaRuta> | undefined;
 
 // --- Hoja inferior en móvil ---
 
@@ -211,6 +214,8 @@ function filtrosClaveMapa() {
 
 function mostrarPestana(p: Pestana) {
   pestana = p;
+  // el modo "toca el mapa" no debe quedar activo fuera de Mi ruta
+  if (p !== "ruta") vistaRutaCtl?.cerrarFormulario();
   pestanaExplorar.setAttribute("aria-pressed", String(p === "explorar"));
   pestanaRuta.setAttribute("aria-pressed", String(p === "ruta"));
   if (movil.matches && app.dataset.hoja === "mini") hoja("media");
@@ -259,7 +264,41 @@ almacen.alCambiar(() => {
 
 // --- Detalle ---
 
+/** Ficha de un lugar de "Mis lugares": se arma con lo guardado, no hay archivo que cargar */
+function cuerpoPropio(r: Recurso): HTMLElement {
+  const l = lugares.obtener(r.id);
+  const indicaciones = conPunto(r) ? enlaceIndicaciones([r]) : null;
+  return h(
+    "div",
+    { class: "d-cuerpo" },
+    l?.nota ? h("section", { class: "d-seccion" }, h("h3", null, "Nota"), ...parrafos(l.nota, "lectura")) : null,
+    h(
+      "dl",
+      { class: "d-datos" },
+      h("div", { class: "d-dato" }, h("dt", null, "Coordenadas"), h("dd", null, `${r.lat}, ${r.lng}`))
+    ),
+    h(
+      "div",
+      { class: "d-acciones" },
+      indicaciones ? h("a", { class: "boton", href: indicaciones, target: "_blank", rel: "noopener" }, "Cómo llegar") : null,
+      h(
+        "button",
+        {
+          type: "button",
+          class: "boton boton-sec",
+          onclick: () => {
+            mostrarPestana("ruta");
+            vistaRutaCtl?.editarLugar(r.id);
+          },
+        },
+        "Editar"
+      )
+    )
+  );
+}
+
 async function abrir(r: Recurso, { acercar = true, historial = true } = {}) {
+  vistaRutaCtl?.cerrarFormulario();
   seleccion = r;
   mapa.seleccionar(r, acercar);
   if (historial) {
@@ -282,6 +321,12 @@ async function abrir(r: Recurso, { acercar = true, historial = true } = {}) {
   panel.scrollTop = 0;
   if (movil.matches && app.dataset.hoja === "mini") hoja("media");
   vistaDetalle.querySelector<HTMLElement>("#detalle-titulo")?.focus({ preventScroll: true });
+
+  if (esPropio(r.id)) {
+    vistaDetalle.querySelector(".cargando")?.remove();
+    vistaDetalle.append(cuerpoPropio(r));
+    return;
+  }
 
   try {
     const d = await cargarDetalle(r.id);
@@ -356,6 +401,8 @@ async function iniciar() {
     return;
   }
 
+  // antes de leer la URL: ?r= puede ser un lugar propio
+  lugares = crearLugares(indice);
   const corte = fechaLegible(indice.fechaCorte);
   $("fecha-corte").textContent = corte;
   crearChips();
@@ -387,12 +434,16 @@ async function iniciar() {
   });
   actualizar({ url: false });
 
-  const vistaRutaCtl = crearVistaRuta({
+  vistaRutaCtl = crearVistaRuta({
     contenedor: vistaRuta,
     indice,
     almacen,
     mapa,
+    lugares,
     alAbrir: (r) => abrir(r),
+    alUbicar: () => {
+      if (movil.matches && app.dataset.hoja !== "media") hoja("media");
+    },
   });
   vistaRutaCtl.pintar();
   pintarContadorRuta();

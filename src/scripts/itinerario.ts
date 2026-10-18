@@ -1,6 +1,7 @@
 // Itinerarios guardados en el navegador (localStorage), enlaces para compartirlos y cálculos de distancia
 
 import type { Recurso } from "./data";
+import { esPropio, lugarValido, type Lugar, type LugarNuevo } from "./lugares";
 
 export interface Parada {
   id: number;
@@ -143,40 +144,99 @@ export function crearAlmacen() {
     reiniciarVisitas() {
       cambiar((i) => i.paradas.forEach((p) => (p.visitada = false)));
     },
+    /** al borrar un lugar propio: sale de todas las rutas, no solo de la activa */
+    quitarDeTodas(idRecurso: number) {
+      for (const i of estado.itinerarios) {
+        const antes = i.paradas.length;
+        i.paradas = i.paradas.filter((p) => p.id !== idRecurso);
+        if (i.paradas.length !== antes) i.actualizado = Date.now();
+      }
+      guardar();
+    },
   };
 }
 
 // --- Compartir ---
 
-/** ?ruta=132,757,1598&nombre=... */
-export function enlaceCompartir(i: Itinerario): string {
+/** parada de una ruta que llega por enlace o archivo: un recurso del inventario o un lugar propio */
+export type ParadaExterna = number | LugarNuevo;
+
+/** ?ruta=132,L0,757&l=-13.16,-72.54,Mirador&nombre=...: los lugares propios viajan completos en `l` */
+export function enlaceCompartir(i: Itinerario, lugar: (id: number) => Lugar | undefined): string {
   const url = new URL(location.pathname, location.origin);
-  url.searchParams.set("ruta", i.paradas.map((p) => p.id).join(","));
+  const propios: string[] = [];
+  const ruta = i.paradas.flatMap((p) => {
+    if (!esPropio(p.id)) return [String(p.id)];
+    const l = lugar(p.id);
+    if (!l) return [];
+    propios.push(`${l.lat},${l.lng},${l.nombre}`);
+    return [`L${propios.length - 1}`];
+  });
+  url.searchParams.set("ruta", ruta.join(","));
+  for (const l of propios) url.searchParams.append("l", l);
   url.searchParams.set("nombre", i.nombre);
   return url.toString();
 }
 
-export function leerRutaCompartida(existe: (id: number) => boolean): { nombre: string; ids: number[] } | null {
+export function leerRutaCompartida(existe: (id: number) => boolean): { nombre: string; paradas: ParadaExterna[] } | null {
   const p = new URLSearchParams(location.search);
   const ruta = p.get("ruta");
   if (!ruta) return null;
-  const ids = [...new Set(ruta.split(",").map(Number))].filter((n) => Number.isInteger(n) && existe(n));
-  if (!ids.length) return null;
-  return { nombre: p.get("nombre")?.slice(0, 80) || "Ruta compartida", ids };
+  const propios = p.getAll("l").map((t) => {
+    const [lat, lng, ...nombre] = t.split(",");
+    return lugarValido({ lat, lng, nombre: nombre.join(",") });
+  });
+  const vistos = new Set<string>();
+  const paradas = ruta.split(",").flatMap((t): ParadaExterna[] => {
+    if (vistos.has(t)) return [];
+    vistos.add(t);
+    if (/^L\d+$/.test(t)) {
+      const l = propios[Number(t.slice(1))];
+      return l ? [l] : [];
+    }
+    const n = Number(t);
+    return n > 0 && Number.isInteger(n) && existe(n) ? [n] : [];
+  });
+  if (!paradas.length) return null;
+  return { nombre: p.get("nombre")?.slice(0, 80) || "Ruta compartida", paradas };
 }
 
-/** Lee un archivo exportado (uno o varios itinerarios) */
-export function leerExportado(texto: string, existe: (id: number) => boolean): { nombre: string; paradas: Parada[] }[] {
+/** Lo que se descarga: el itinerario más los lugares propios que usa, para poder importarlo en otro navegador */
+export function exportable(i: Itinerario, lugar: (id: number) => Lugar | undefined) {
+  const lugares = i.paradas.flatMap((p) => {
+    const l = esPropio(p.id) ? lugar(p.id) : undefined;
+    return l ? [{ id: l.id, nombre: l.nombre, nota: l.nota, lat: l.lat, lng: l.lng }] : [];
+  });
+  return lugares.length ? { ...i, lugares } : i;
+}
+
+/** Lee un archivo exportado (uno o varios itinerarios); `resolver` da el id local de cada lugar propio */
+export function leerExportado(
+  texto: string,
+  existe: (id: number) => boolean,
+  resolver: (l: LugarNuevo) => number
+): { nombre: string; paradas: Parada[] }[] {
   const datos = JSON.parse(texto) as unknown;
   const lista = Array.isArray(datos) ? datos : [datos];
   return lista
-    .filter((i): i is Itinerario => !!i && typeof i === "object" && Array.isArray((i as Itinerario).paradas))
-    .map((i) => ({
-      nombre: String(i.nombre ?? "Ruta importada").slice(0, 80),
-      paradas: i.paradas
-        .filter((p) => Number.isInteger(p?.id) && existe(p.id))
-        .map((p) => ({ id: p.id, visitada: !!p.visitada })),
-    }))
+    .filter((i): i is Itinerario & { lugares?: unknown[] } => !!i && typeof i === "object" && Array.isArray((i as Itinerario).paradas))
+    .map((i) => {
+      const propios = new Map<number, LugarNuevo>();
+      for (const l of Array.isArray(i.lugares) ? i.lugares : []) {
+        const v = lugarValido(l);
+        const id = (l as { id?: unknown }).id;
+        if (v && typeof id === "number" && esPropio(id)) propios.set(id, v);
+      }
+      return {
+        nombre: String(i.nombre ?? "Ruta importada").slice(0, 80),
+        paradas: i.paradas.flatMap((p): Parada[] => {
+          if (!Number.isInteger(p?.id)) return [];
+          const propio = esPropio(p.id) ? propios.get(p.id) : undefined;
+          if (propio) return [{ id: resolver(propio), visitada: !!p.visitada }];
+          return !esPropio(p.id) && existe(p.id) ? [{ id: p.id, visitada: !!p.visitada }] : [];
+        }),
+      };
+    })
     .filter((i) => i.paradas.length);
 }
 

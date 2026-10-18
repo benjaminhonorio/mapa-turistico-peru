@@ -57,7 +57,11 @@ export const CATEGORIAS: Record<number, { nombre: string; corto: string; color: 
     color: "#8e3aa0",
   },
   5: { nombre: "Acontecimientos programados", corto: "Acontecimientos", color: "#be2440" },
+  // no es de MINCETUR: los lugares que agrega el usuario (no tiene chip)
+  0: { nombre: "Mis lugares", corto: "Mis lugares", color: "#0b7285" },
 };
+
+export const CATEGORIA_PROPIA = 0;
 
 /** Orden de los chips: igual que la numeración de MINCETUR */
 export const ORDEN_CATEGORIAS = [1, 2, 3, 4, 5];
