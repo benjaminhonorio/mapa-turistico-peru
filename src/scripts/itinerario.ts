@@ -124,11 +124,12 @@ export function crearAlmacen() {
         else i.paradas.push({ id: idRecurso, visitada: false });
       });
     },
-    mover(idRecurso: number, delta: number) {
+    /** lleva la parada al lugar que ocupa `idDestino` */
+    mover(idRecurso: number, idDestino: number) {
       cambiar((i) => {
         const k = i.paradas.findIndex((p) => p.id === idRecurso);
-        const destino = k + delta;
-        if (k < 0 || destino < 0 || destino >= i.paradas.length) return;
+        const destino = i.paradas.findIndex((p) => p.id === idDestino);
+        if (k < 0 || destino < 0 || k === destino) return;
         const [p] = i.paradas.splice(k, 1);
         i.paradas.splice(destino, 0, p);
       });

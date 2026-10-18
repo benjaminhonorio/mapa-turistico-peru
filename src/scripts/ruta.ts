@@ -184,6 +184,92 @@ export function crearVistaRuta(o: OpcionesRuta) {
     almacen.eliminar(i.id);
   }
 
+  // --- Arrastrar para reordenar ---
+
+  /** mientras se arrastra no se repinta: el GPS o un aviso reemplazarían la fila en la mano */
+  let arrastrando = false;
+  let repintarAlSoltar = false;
+
+  function arrastrar(e: PointerEvent, manija: HTMLElement) {
+    if (arrastrando || e.button !== 0) return;
+    e.preventDefault();
+    const fila = manija.closest<HTMLElement>(".parada")!;
+    const lista = fila.parentElement!;
+    const items = [...lista.children] as HTMLElement[];
+    const desde = items.indexOf(fila);
+    const base = lista.getBoundingClientRect().top;
+    const centros = items.map((x) => {
+      const r = x.getBoundingClientRect();
+      return r.top - base + r.height / 2;
+    });
+    const alto = fila.getBoundingClientRect().height;
+    const inicioY = e.clientY;
+    const inicioScroll = contenedor.scrollTop;
+    let y = e.clientY;
+    let hasta = desde;
+    let cuadro = 0;
+
+    arrastrando = true;
+    manija.setPointerCapture(e.pointerId);
+    lista.classList.add("ordenando");
+    fila.classList.add("arrastrada");
+
+    function actualizar() {
+      const dy = y - inicioY + contenedor.scrollTop - inicioScroll;
+      const centro = centros[desde] + dy;
+      hasta = desde;
+      for (let j = desde + 1; j < items.length && centro > centros[j]; j++) hasta = j;
+      for (let j = desde - 1; j >= 0 && centro < centros[j]; j--) hasta = j;
+      fila.style.transform = `translateY(${dy}px)`;
+      items.forEach((x, j) => {
+        if (x === fila) return;
+        const corre = hasta > desde && j > desde && j <= hasta ? -alto : hasta < desde && j >= hasta && j < desde ? alto : 0;
+        x.style.transform = corre ? `translateY(${corre}px)` : "";
+      });
+    }
+
+    // desplaza la vista si se arrastra cerca del borde
+    function autodesplazar() {
+      const r = contenedor.getBoundingClientRect();
+      const margen = 48;
+      const v = y < r.top + margen ? -(r.top + margen - y) : y > r.bottom - margen ? y - (r.bottom - margen) : 0;
+      if (v) {
+        const antes = contenedor.scrollTop;
+        contenedor.scrollTop += Math.max(-margen, Math.min(margen, v)) / 3;
+        if (contenedor.scrollTop !== antes) actualizar();
+      }
+      cuadro = requestAnimationFrame(autodesplazar);
+    }
+    cuadro = requestAnimationFrame(autodesplazar);
+
+    function mover(ev: PointerEvent) {
+      y = ev.clientY;
+      actualizar();
+    }
+
+    function soltar(ev: PointerEvent) {
+      cancelAnimationFrame(cuadro);
+      manija.removeEventListener("pointermove", mover);
+      manija.removeEventListener("pointerup", soltar);
+      manija.removeEventListener("pointercancel", soltar);
+      lista.classList.remove("ordenando");
+      fila.classList.remove("arrastrada");
+      for (const x of items) x.style.transform = "";
+      arrastrando = false;
+      if (ev.type === "pointerup" && hasta !== desde) {
+        repintarAlSoltar = false;
+        almacen.mover(Number(fila.dataset.id), Number(items[hasta].dataset.id));
+      } else if (repintarAlSoltar) {
+        repintarAlSoltar = false;
+        pintar();
+      }
+    }
+
+    manija.addEventListener("pointermove", mover);
+    manija.addEventListener("pointerup", soltar);
+    manija.addEventListener("pointercancel", soltar);
+  }
+
   // --- Pintado ---
 
   function boton(texto: string, onclick: () => void, clase = "boton boton-sec", extra: Record<string, string> = {}) {
@@ -288,8 +374,9 @@ export function crearVistaRuta(o: OpcionesRuta) {
     return h("div", { class: "seguir", role: "status", "aria-live": "polite" }, ...cuerpo);
   }
 
-  function filaParada(x: Fila, anterior: Fila | undefined, total: number, k: number): HTMLElement {
+  function filaParada(x: Fila, f: Fila[], k: number): HTMLElement {
     const r = x.r;
+    const anterior = f[k - 1];
     const cat = CATEGORIAS[r.categoria];
     const tramo = anterior && conPunto(anterior.r) && conPunto(r) ? distancia(anterior.r, r) : null;
     const meta = [r.region, tramo !== null ? `+${km(tramo)}` : null, conPunto(r) ? null : "sin punto en el mapa"]
@@ -302,10 +389,29 @@ export function crearVistaRuta(o: OpcionesRuta) {
       "data-foco": `v${r.id}`,
     });
     visitada.addEventListener("change", () => almacen.marcarVisitada(r.id, visitada.checked));
+    const manija = h(
+      "button",
+      {
+        type: "button",
+        class: "parada-manija",
+        "aria-label": `Reordenar ${r.nombre} (arrastra o usa las flechas)`,
+        title: "Arrastra para reordenar",
+        "data-foco": `m${r.id}`,
+      },
+      h("span", { class: "parada-agarre", "aria-hidden": "true" }, "⠿"),
+      h("span", { class: "ruta-num", "aria-hidden": "true" }, String(x.numero))
+    );
+    manija.addEventListener("pointerdown", (e) => arrastrar(e, manija));
+    manija.addEventListener("keydown", (e) => {
+      const vecino = e.key === "ArrowUp" ? f[k - 1] : e.key === "ArrowDown" ? f[k + 1] : undefined;
+      if (!vecino) return;
+      e.preventDefault();
+      almacen.mover(r.id, vecino.r.id);
+    });
     return h(
       "li",
-      { class: `parada${x.visitada ? " visitada" : ""}`, style: `--cat:${cat.color}` },
-      h("span", { class: "ruta-num", "aria-hidden": "true" }, String(x.numero)),
+      { class: `parada${x.visitada ? " visitada" : ""}`, style: `--cat:${cat.color}`, "data-id": r.id },
+      manija,
       h(
         "button",
         { type: "button", class: "parada-texto", onclick: () => o.alAbrir(r) },
@@ -316,16 +422,6 @@ export function crearVistaRuta(o: OpcionesRuta) {
         "span",
         { class: "parada-controles" },
         visitada,
-        boton("↑", () => almacen.mover(r.id, -1), "icono", {
-          "aria-label": `Subir ${r.nombre}`,
-          "data-foco": `s${r.id}`,
-          ...(k === 0 ? { disabled: "" } : {}),
-        }),
-        boton("↓", () => almacen.mover(r.id, 1), "icono", {
-          "aria-label": `Bajar ${r.nombre}`,
-          "data-foco": `b${r.id}`,
-          ...(k === total - 1 ? { disabled: "" } : {}),
-        }),
         boton("✕", () => almacen.alternar(r.id), "icono", { "aria-label": `Quitar ${r.nombre}` })
       )
     );
@@ -393,7 +489,7 @@ export function crearVistaRuta(o: OpcionesRuta) {
         ? h(
             "ol",
             { class: "paradas" },
-            f.map((x, k) => filaParada(x, f[k - 1], f.length, k))
+            f.map((x, k) => filaParada(x, f, k))
           )
         : h(
             "p",
@@ -413,6 +509,10 @@ export function crearVistaRuta(o: OpcionesRuta) {
   }
 
   function pintar() {
+    if (arrastrando) {
+      repintarAlSoltar = true;
+      return;
+    }
     const foco = (document.activeElement as HTMLElement | null)?.dataset?.foco;
     const i = almacen.activo();
     contenedor.replaceChildren(

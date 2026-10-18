@@ -951,6 +951,52 @@ a {
   border-bottom: 1px solid var(--linea);
 }
 
+.parada-manija {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  align-self: stretch;
+  padding: 0 4px 0 0;
+  border: 0;
+  background: none;
+  color: var(--tenue);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.parada-agarre {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.parada-manija:hover .parada-agarre,
+.parada-manija:focus-visible .parada-agarre {
+  color: var(--ruta);
+}
+
+.paradas.ordenando {
+  cursor: grabbing;
+}
+
+.paradas.ordenando .parada {
+  transition: transform 0.15s ease;
+}
+
+.parada.arrastrada {
+  position: relative;
+  z-index: 1;
+  background: var(--fondo);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.15);
+  transition: none !important;
+}
+
+.parada.arrastrada .parada-manija {
+  cursor: grabbing;
+}
+
 .parada.visitada .ruta-num {
   background: var(--fondo);
   color: var(--ruta);
